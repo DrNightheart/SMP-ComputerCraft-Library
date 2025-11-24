@@ -206,15 +206,18 @@ local function promptForConfig()
     print("If you change your mind, delete '" .. CONFIG_FILE .. "'")
 
   
-    io.write("Items, use the format 'minecraft:clay,minecraft:stone' for multiple.")
+    print("Items, use the format 'minecraft:clay,minecraft:stone' for multiple.")
+    io.write()
     local itemInput = read()
     local items = split(itemInput, ",")
 
-    io.write("Destinations (Name/ID, comma-separated, priority order): ")
+    print("Destinations (Name/ID, comma-separated, priority order):")
+    io.write()
     local destInput = read()
     local destinations = split(destInput, ",")
     
-    io.write("Sources (Name/ID, comma-separated,sources get pulled from.): ")
+    print("Sources (Name/ID, comma-separated,sources get pulled from.): ")
+    io.write()
     local sourceInput = read()
     local sources = split(sourceInput, ",")
 
