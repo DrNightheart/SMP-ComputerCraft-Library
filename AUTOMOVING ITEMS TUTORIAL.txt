@@ -1,0 +1,28 @@
+Hello! If you are looking at this, it means you are interested in the automoving items program!
+So, ill give you the setup for it.
+
+
+1. Place down a computer (Universal across all setups. You can use the same computer for multiple programs.)            ] THESE STEPS ARE PRETTY MUCH UNIVERSAL    
+2. use Wget OR install the .lua file from this repository and drag and drop it into ComputerCraft.                      ]
+The program will download as the file name if you use drag and drop. (Drag in Mining.lua and it imports as Mining.lua)  ]
+3. Put the name of the program into the terminal                                                                        ]
+------------------------------------------------------------------------------------------------------------------------
+PROGRAM UNIQUE SETUP INSTRUCTIONS
+1. Upon entering the program, it will ask you for an item name. Input the item name like this: <modname>:<itemname>, ex. minecraft:stick. 
+These are the same as you would use in /give. After inputting item name, press Enter.
+2. Now, it will ask you for a destination. If you do not know how these work, do the following substeps.
+2a. Place down a wired modem next to any inventory block.
+2b. Activate the wired modem. It will give out the ID of the item in chat, such as minecraft:chest_68, or create:item_vault_110
+2c. Put these into the computer. You can have multiple destinations by doing: minecraft:chest_60,create:item_vault_10,create:depot_134,etc,etc,etc.
+3. Then, do the same thing for Sources. (Where the modems will pull from.)
+4. Press enter, and it should start automoving.
+
+
+HOW TO CONFIGURE YOUR STARTUP TO BE FOR THIS ONE PROGRAM! Replace <YOUR PROGRAM NAME> with the downloaded programs name, such as: shell.run("Miner.lua")
+sleep(0.1)
+shell.run("<YOUR PROGRAM NAME>"
+
+
+
+KNOWN ISSUES:
+Sometimes if you have it run on startup without a delay, it gives an error when using Sophisticated backpacks. The fix is to have a slight sleep in the startup command, as shown above.
