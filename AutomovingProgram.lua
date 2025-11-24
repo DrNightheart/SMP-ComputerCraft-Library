@@ -1,5 +1,5 @@
 
---Hello! This is an example code. It functions fully, but is quite barebones.
+--Hello! This is an example code. It functions fully, but is quite barebones. Made by DrNightheart.
 local CONFIG_FILE = "auto_filter_config.json" --you can change this if you want! Its important to change this if you have a lot of CC Programs, because some may accidentally use the same config and screw things up.
 -------------------------------------------------- hoi
 local function tokenize(input)
