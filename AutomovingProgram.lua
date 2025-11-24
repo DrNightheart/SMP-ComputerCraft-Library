@@ -1,11 +1,14 @@
-
 --Hello! This is an example code. It functions fully, but is quite barebones. Made by DrNightheart.
 local CONFIG_FILE = "auto_filter_config.json" --you can change this if you want! Its important to change this if you have a lot of CC Programs, because some may accidentally use the same config and screw things up.
--------------------------------------------------- hoi
-local function tokenize(input)
+-------------------------------------------------- hoi. THIS VERSION IS THE FIXED VERSION! DO NOT USE ANY PROGRAMS BEFORE THIS ONE. I APOLOGIZE FOR ADDING THE INCORRECT FILE EARLIER!!
+
+local function split(input, delimiter)
     local parts = {}
-    for part in string.gmatch(input, "%S+") do
-        table.insert(parts, part)
+    for part in string.gmatch(input, "([^" .. delimiter .. "]+)") do
+        local trimmed = part:match("^%s*(.-)%s*$")
+        if trimmed ~= "" then
+            table.insert(parts, trimmed)
+        end
     end
     return parts
 end
@@ -23,7 +26,7 @@ local function getInventorySlotsContaining(p, exactName)
         if item and item.name then
             local itemName = string.lower(item.name)
             
-      --EXACT match of items. I used to use string.find 
+            --EXACT match of items. I used to use string.find 
             if itemName == lowerName then
                 table.insert(foundSlots, {
                     slot = slot,
@@ -38,7 +41,7 @@ end
 
 -- this is the core logic! 
 
-local function sendAllItemsFromNetwork(itemName, destNames, sourceNames)
+local function sendAllItemsFromNetwork(itemNames, destNames, sourceNames)
     
     -- 1. Validate the destinations to make sure it works right
     local destinations = {}
@@ -88,75 +91,83 @@ local function sendAllItemsFromNetwork(itemName, destNames, sourceNames)
     end
 
     if #sourcesToScan == 0 then
-        print("Warning: All valid sources are also destinations. No items will be moved. I.. why?")
+        print("ERROR: All valid sources are also destinations. No items will be moved. I.. why?")
     end
 
     -- 5. Start the main loop!!
     local itemSummary = destNames[1]
     if #destNames > 1 then itemSummary = destNames[1] .. " and " .. (#destNames - 1) .. " others" end
 
+    local itemListSummary = itemNames[1]
+    if #itemNames > 1 then itemListSummary = itemNames[1] .. " and " .. (#itemNames - 1) .. " others" end
 
-    print(string.format("Moving  '%s' from %d source(s) to %s.", itemName, #sourcesToScan, itemSummary))
+    print(string.format("Moving '%s' from %d source(s) to %s.", itemListSummary, #sourcesToScan, itemSummary))
+    print("Monitoring continuously...") --This helps prevent server strain!
 
     local totalMovedOverall = 0
-    local cycleCount = 0
+    local lastReportTime = os.clock()
 
     while true do
         local movedThisCycle = 0
         
-        for _, sourceData in ipairs(sourcesToScan) do
-            local p = sourceData.peripheral
-            
-            if peripheral.isPresent(sourceData.name) then
-                -- Pass the exact item name to the function
-                local itemSlots = getInventorySlotsContaining(p, itemName)
+        for _, itemName in ipairs(itemNames) do
+            for _, sourceData in ipairs(sourcesToScan) do
+                local p = sourceData.peripheral
+                
+                if peripheral.isPresent(sourceData.name) then
+                    -- Pass the exact item name to the function instead of ALL of that thing
+                    local itemSlots = getInventorySlotsContaining(p, itemName)
 
-                if #itemSlots > 0 then
-                    
-                    for _, sourceDetail in ipairs(itemSlots) do
-                        local sourceSlot = sourceDetail.slot
-                        local remainingInSlot = sourceDetail.count
+                    if #itemSlots > 0 then
                         
-                        -- Get the correctly-cased item name *from the slot detail*
-                        local fullItemName = sourceDetail.name 
+                        for _, sourceDetail in ipairs(itemSlots) do
+                            local sourceSlot = sourceDetail.slot
+                            local remainingInSlot = sourceDetail.count
+                            
+                            
+                            local fullItemName = sourceDetail.name 
 
-                        for _, dest in ipairs(destinations) do
-                            if remainingInSlot <= 0 then break end
+                            for _, dest in ipairs(destinations) do
+                                if remainingInSlot <= 0 then break end
 
-                            if peripheral.isPresent(dest.name) then
-                                local limit = remainingInSlot
+                                if peripheral.isPresent(dest.name) then
+                                    local limit = remainingInSlot
                                 
-                                -- Use the correct fullItemName as the filter
-                                local success, movedCount = pcall(p.pushItems, dest.id, sourceSlot, limit, nil, fullItemName)
+                                    local success, movedCount = pcall(p.pushItems, dest.id, sourceSlot, limit, nil, fullItemName)
 
-                                if not success or type(movedCount) ~= "number" then
-                                    print(string.format("Warning: Peripheral '%s' error during transfer. Error: %s", dest.name, tostring(movedCount)))
-                                
-                                elseif movedCount > 0 then
-                                    movedThisCycle = movedThisCycle + movedCount
-                                    totalMovedOverall = totalMovedOverall + movedCount
-                                    remainingInSlot = remainingInSlot - movedCount
+                                    if not success or type(movedCount) ~= "number" then
+                                        print(string.format("Warning: Peripheral '%s' error during transfer. Error: %s", dest.name, tostring(movedCount)))
+                                    
+                                    elseif movedCount > 0 then
+                                        movedThisCycle = movedThisCycle + movedCount
+                                        totalMovedOverall = totalMovedOverall + movedCount
+                                        remainingInSlot = remainingInSlot - movedCount
+                                    end
                                 end
                             end
                         end
                     end
-                end
-            end -- end!!
-        end -- holy ends.. some sort of broken end.
-
-        cycleCount = cycleCount + 1
---this is here to just kinda remove strain on the server, helps slow it down while lookin good.  CC may be optimized but a million of these could screw it up.
-        if movedThisCycle > 0 then
-            print(string.format("[Cycle %d] Moved %d item(s). Total Overall: %d.", cycleCount, movedThisCycle, totalMovedOverall))
-        elseif cycleCount % 20 == 0 then
-             print(string.format("... Monitoring sources (Cycle %d). No items moved.", cycleCount))
+                end -- end!!
+            end -- holy ends.. some sort of broken end.
         end
 
-        sleep(1)
+        --this is here to just kinda remove strain on the server, helps slow it down while lookin good. CC may be optimized but a million of these could screw it up.
+        if movedThisCycle > 0 then
+            print(string.format("Moved %d item(s). Total: %d", movedThisCycle, totalMovedOverall))
+            lastReportTime = os.clock()
+        else
+            -- Only print status update every 20 seconds if nothing moved
+            if os.clock() - lastReportTime >= 20 then
+                print(string.format("... Still monitoring. Total moved: %d", totalMovedOverall))
+                lastReportTime = os.clock()
+            end
+        end
+
+        sleep(1)--Change this for faster program
     end
 end
 
--- Config logic
+-- Config logic thingies
 
 local function loadConfig()
     if not fs.exists(CONFIG_FILE) then
@@ -168,16 +179,16 @@ local function loadConfig()
         local content = file.readAll()
         file.close()
         local success, config = pcall(textutils.unserialize, content)
-        if success and type(config) == "table" and config.item and config.destinations and config.sources then
+        if success and type(config) == "table" and config.items and config.destinations and config.sources then
             return config
         end
     end
     return nil
 end
 
-local function saveConfig(item, destinations, sources)
+local function saveConfig(items, destinations, sources)
     local config = {
-        item = item,
+        items = items,
         destinations = destinations,
         sources = sources
     }
@@ -192,27 +203,29 @@ end
 
 local function promptForConfig()
     print("--- Initial Filtered Setup ---")
-    print("If you change your mind, delete the file '" .. CONFIG_FILE .. "'")
+    print("If you change your mind, delete '" .. CONFIG_FILE .. "'")
 
   
-    io.write("Item (exact ID, e.g., 'minecraft:clay'): ")
-    local item = read()
+    io.write("Items, use the format 'minecraft:clay,minecraft:stone' for multiple.")
+    local itemInput = read()
+    local items = split(itemInput, ",")
 
     io.write("Destinations (Name/ID, comma-separated, priority order): ")
     local destInput = read()
-    local destinations = tokenize(destInput)
+    local destinations = split(destInput, ",")
     
-    io.write("Sources (Name/ID, comma-separated, ONLY PULL FROM THESE): ")
+    io.write("Sources (Name/ID, comma-separated,sources get pulled from.): ")
     local sourceInput = read()
-    local sources = tokenize(sourceInput)
+    local sources = split(sourceInput, ",")
 
-    if #destinations == 0 or #sources == 0 then
-        print("Error: Destinations and Sources must be provided. Aborting setup.")
+    if #items == 0 or #destinations == 0 or #sources == 0 then
+        print("Error: Items, Destinations, and Sources must all be provided. Aborting setup.")
+        print("Try again ):.")
         return nil
     end
 
-    saveConfig(item, destinations, sources)
-    return { item = item, destinations = destinations, sources = sources }
+    saveConfig(items, destinations, sources)
+    return { items = items, destinations = destinations, sources = sources }
 end
 
 -- main
@@ -225,8 +238,8 @@ local function main()
         config = promptForConfig()
     end
 
-    if config and config.item and config.destinations and #config.destinations > 0 and config.sources and #config.sources > 0 then
-        sendAllItemsFromNetwork(config.item, config.destinations, config.sources)
+    if config and config.items and #config.items > 0 and config.destinations and #config.destinations > 0 and config.sources and #config.sources > 0 then
+        sendAllItemsFromNetwork(config.items, config.destinations, config.sources)
     else
         print("Error: Invalid config. Please delete '" .. CONFIG_FILE .. "' and restart this.")
     end
