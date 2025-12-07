@@ -239,7 +239,7 @@ local function promptForConfig()
 
     -- 1. Ask for Mode Stuff uwu
     print("\nSelect Mode:")
-    print("1. Items)
+    print("1. Items")
     print("2. Fluids")
     io.write("> ")
     local modeInput = read()
