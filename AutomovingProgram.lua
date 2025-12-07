@@ -79,7 +79,7 @@ local function sendAllThingsFromNetwork(targetNames, destNames, sourceNames, mod
     for _, name in ipairs(destNames) do
         local p = peripheral.wrap(name)
         if p then
-            if (isFluidMode and p.tanks) or (not isFluidMode and p.pushItems) then
+            if (isFluidMode and p.tanks) or (not isFluidMode and p.pullItems) then
                 local id = peripheral.getName(p)
                 table.insert(destinations, {
                     peripheral = p,
@@ -169,7 +169,12 @@ local function sendAllThingsFromNetwork(targetNames, destNames, sourceNames, mod
                                     if isFluidMode then
                                         success, movedCount = pcall(p.pushFluid, dest.id, limit, fullName)
                                     else
-                                        success, movedCount = pcall(p.pushItems, dest.id, sourceSlot, limit, nil, fullName)
+                                        local destPeripheral = dest.peripheral
+                                        success, movedCount = pcall(destPeripheral.pullItems, sourceData.id, sourceSlot, limit)
+                                        
+                                        if (not success or type(movedCount) ~= "number" or movedCount == 0) and p.pushItems then
+                                            success, movedCount = pcall(p.pushItems, dest.id, sourceSlot, limit)
+                                        end
                                     end
 
                                     if not success or type(movedCount) ~= "number" then
