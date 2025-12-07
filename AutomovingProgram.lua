@@ -1,6 +1,8 @@
---Hello! This is an example code. It functions fully, but is quite barebones. Made by DrNightheart.
-local CONFIG_FILE = "auto_filter_config.json" --you can change this if you want! Its important to change this if you have a lot of CC Programs, because some may accidentally use the same config and screw things up.
--------------------------------------------------- hoi. THIS VERSION IS THE FIXED VERSION! DO NOT USE ANY PROGRAMS BEFORE THIS ONE. I APOLOGIZE FOR ADDING THE INCORRECT FILE EARLIER!!
+local CONFIG_FILE = "auto_filter_config.json" 
+
+-- FLUID & ITEM UPDATE! Did some optimizations, I hope you all enjoyyy!
+--I also added extra comments inorder to help newbies.
+-- Made by DrNightheart. Distribute however you please.
 
 local function split(input, delimiter)
     local parts = {}
@@ -13,6 +15,7 @@ local function split(input, delimiter)
     return parts
 end
 
+-- ITEM SCANNING...
 local function getInventorySlotsContaining(p, exactName)
     local lowerName = string.lower(exactName)
     local foundSlots = {}
@@ -25,8 +28,6 @@ local function getInventorySlotsContaining(p, exactName)
     for slot, item in pairs(inventory) do
         if item and item.name then
             local itemName = string.lower(item.name)
-            
-            --EXACT match of items. I used to use string.find 
             if itemName == lowerName then
                 table.insert(foundSlots, {
                     slot = slot,
@@ -39,50 +40,83 @@ local function getInventorySlotsContaining(p, exactName)
     return foundSlots
 end
 
--- this is the core logic! 
+-- FLUID SCANNING (New! I added this in THIS version, it is experimental.)
+local function getFluidTanksContaining(p, exactName)
+    local lowerName = string.lower(exactName)
+    local foundTanks = {}
 
-local function sendAllItemsFromNetwork(itemNames, destNames, sourceNames)
+    -- Peripheral must support tanks(). Now, normally all modded fluid tanks have this, however, you never know.
+    if not p.tanks then return foundTanks end
+
+    local success, tanks = pcall(p.tanks)
+    if not success or type(tanks) ~= "table" then
+        return foundTanks
+    end
+
+    for i, tank in pairs(tanks) do
+        if tank and tank.name then
+            local fluidName = string.lower(tank.name)
+            if fluidName == lowerName and tank.amount > 0 then
+                table.insert(foundTanks, {
+                    slot = nil, -- Fluids don't strictly use slots for pushing usually, but this is more for making sure
+                    name = tank.name,
+                    count = tank.amount
+                })
+            end
+        end
+    end
+    return foundTanks
+end
+
+-- CORE LOGIC! If you wanna learn something, look here!
+local function sendAllThingsFromNetwork(targetNames, destNames, sourceNames, mode)
     
-    -- 1. Validate the destinations to make sure it works right
+    local isFluidMode = (mode == "fluid")
+
+    -- 1. Validate The Destinations
     local destinations = {}
     local destIDs = {}
     for _, name in ipairs(destNames) do
         local p = peripheral.wrap(name)
-        if p and p.pushItems then
-            local id = peripheral.getName(p)
-            table.insert(destinations, {
-                peripheral = p,
-                id = id,
-                name = name
-            })
-            destIDs[id] = true
+        if p then
+            if (isFluidMode and p.tanks) or (not isFluidMode and p.pushItems) then
+                local id = peripheral.getName(p)
+                table.insert(destinations, {
+                    peripheral = p,
+                    id = id,
+                    name = name
+                })
+                destIDs[id] = true
+            end
         end
     end
 
-    -- 2. Validate sources to make sure it works right
+    -- 2. Validate The Sources
     local validSources = {}
     for _, name in ipairs(sourceNames) do
         local p = peripheral.wrap(name)
-        if p and p.list then
-            table.insert(validSources, {
-                peripheral = p,
-                id = peripheral.getName(p),
-                name = name
-            })
+        if p then
+             if (isFluidMode and p.pushFluid) or (not isFluidMode and p.list) then
+                table.insert(validSources, {
+                    peripheral = p,
+                    id = peripheral.getName(p),
+                    name = name
+                })
+            end
         end
     end
 
-    -- 3. Check for valid setup, if it ISNT valid, then.. how?
+    -- 3. Safety Checks (Not new)
     if #destinations == 0 then
-        print("Error: No valid destinations found. Stopping.")
+        print("Error: No valid destinations found for mode: " .. mode)
         return 0
     end
     if #validSources == 0 then
-        print("Error: No valid source peripherals found. Stopping.")
+        print("Error: No valid sources found for mode: " .. mode)
         return 0
     end
 
-    -- 4. 
+-- Yeah, sooo, if you get this error, it means you messed up.
     local sourcesToScan = {}
     for _, source in ipairs(validSources) do
         if not destIDs[source.id] then
@@ -91,18 +125,13 @@ local function sendAllItemsFromNetwork(itemNames, destNames, sourceNames)
     end
 
     if #sourcesToScan == 0 then
-        print("ERROR: All valid sources are also destinations. No items will be moved. I.. why?")
+        print("ERROR: All valid sources are also destinations.")
     end
 
-    -- 5. Start the main loop!!
-    local itemSummary = destNames[1]
-    if #destNames > 1 then itemSummary = destNames[1] .. " and " .. (#destNames - 1) .. " others" end
-
-    local itemListSummary = itemNames[1]
-    if #itemNames > 1 then itemListSummary = itemNames[1] .. " and " .. (#itemNames - 1) .. " others" end
-
-    print(string.format("Moving '%s' from %d source(s) to %s.", itemListSummary, #sourcesToScan, itemSummary))
-    print("Monitoring continuously...") --This helps prevent server strain!
+    -- 5. Main Loop! Look here to learn MORE things!
+    local typeLabel = isFluidMode and "Fluid" or "Item"
+    print(string.format("Moving %s(s) from %d source(s) to %d destination(s).", typeLabel, #sourcesToScan, #destinations))
+    print("Monitoring continuously...")
 
     local totalMovedOverall = 0
     local lastReportTime = os.clock()
@@ -110,128 +139,146 @@ local function sendAllItemsFromNetwork(itemNames, destNames, sourceNames)
     while true do
         local movedThisCycle = 0
         
-        for _, itemName in ipairs(itemNames) do
+        for _, targetName in ipairs(targetNames) do
             for _, sourceData in ipairs(sourcesToScan) do
                 local p = sourceData.peripheral
                 
                 if peripheral.isPresent(sourceData.name) then
-                    -- Pass the exact item name to the function instead of ALL of that thing
-                    local itemSlots = getInventorySlotsContaining(p, itemName)
+                    
+                    local contentSlots = {}
+                    if isFluidMode then
+                        contentSlots = getFluidTanksContaining(p, targetName)
+                    else
+                        contentSlots = getInventorySlotsContaining(p, targetName)
+                    end
 
-                    if #itemSlots > 0 then
+                    if #contentSlots > 0 then
                         
-                        for _, sourceDetail in ipairs(itemSlots) do
-                            local sourceSlot = sourceDetail.slot
-                            local remainingInSlot = sourceDetail.count
-                            
-                            
-                            local fullItemName = sourceDetail.name 
+                        for _, sourceDetail in ipairs(contentSlots) do
+                            local sourceSlot = sourceDetail.slot -- nil for fluids usually
+                            local remainingInSource = sourceDetail.count
+                            local fullName = sourceDetail.name 
 
                             for _, dest in ipairs(destinations) do
-                                if remainingInSlot <= 0 then break end
+                                if remainingInSource <= 0 then break end
 
                                 if peripheral.isPresent(dest.name) then
-                                    local limit = remainingInSlot
-                                
-                                    local success, movedCount = pcall(p.pushItems, dest.id, sourceSlot, limit, nil, fullItemName)
+                                    local limit = remainingInSource
+                                    local success, movedCount
+
+                                    if isFluidMode then
+                                        success, movedCount = pcall(p.pushFluid, dest.id, limit, fullName)
+                                    else
+                                        success, movedCount = pcall(p.pushItems, dest.id, sourceSlot, limit, nil, fullName)
+                                    end
 
                                     if not success or type(movedCount) ~= "number" then
-                                        print(string.format("Warning: Peripheral '%s' error during transfer. Error: %s", dest.name, tostring(movedCount)))
-                                    
+                                        -- Suppress error printing slightly to avoid spam, or print once
                                     elseif movedCount > 0 then
                                         movedThisCycle = movedThisCycle + movedCount
                                         totalMovedOverall = totalMovedOverall + movedCount
-                                        remainingInSlot = remainingInSlot - movedCount
+                                        remainingInSource = remainingInSource - movedCount
                                     end
                                 end
                             end
                         end
                     end
-                end -- end!!
-            end -- holy ends.. some sort of broken end.
+                end 
+            end 
         end
 
-        --this is here to just kinda remove strain on the server, helps slow it down while lookin good. CC may be optimized but a million of these could screw it up.
+        -- Reporting logic
         if movedThisCycle > 0 then
-            print(string.format("Moved %d item(s). Total: %d", movedThisCycle, totalMovedOverall))
+            local unit = isFluidMode and "mB" or "items"
+            print(string.format("Moved %d %s. Total: %d", movedThisCycle, unit, totalMovedOverall))
             lastReportTime = os.clock()
         else
-            -- Only print status update every 20 seconds if nothing moved
             if os.clock() - lastReportTime >= 20 then
-                print(string.format("... Still monitoring. Total moved: %d", totalMovedOverall))
+                print(string.format("... Still monitoring (%s). Total moved: %d", typeLabel, totalMovedOverall))
                 lastReportTime = os.clock()
             end
         end
 
-        sleep(1)--Change this for faster program
+        sleep(1) -- Adjust for speed
     end
 end
 
--- Config logic thingies
+-- CONFIG LOGIC. This is for the first startup stuff ya get asked.
 
 local function loadConfig()
-    if not fs.exists(CONFIG_FILE) then
-        return nil
-    end
-
+    if not fs.exists(CONFIG_FILE) then return nil end
     local file = fs.open(CONFIG_FILE, "r")
     if file then
         local content = file.readAll()
         file.close()
         local success, config = pcall(textutils.unserialize, content)
-        if success and type(config) == "table" and config.items and config.destinations and config.sources then
+        if success and type(config) == "table" and config.targets then
             return config
         end
     end
     return nil
 end
 
-local function saveConfig(items, destinations, sources)
+local function saveConfig(mode, targets, destinations, sources)
     local config = {
-        items = items,
+        mode = mode,
+        targets = targets,
         destinations = destinations,
         sources = sources
     }
-    local content = textutils.serialize(config)
     local file = fs.open(CONFIG_FILE, "w")
     if file then
-        file.write(content)
+        file.write(textutils.serialize(config))
         file.close()
         print(string.format("Configuration saved to '%s'.", CONFIG_FILE))
     end
 end
 
 local function promptForConfig()
-    print("--- Initial Filtered Setup ---")
-    print("If you change your mind, delete '" .. CONFIG_FILE .. "'")
+    print("To reset, delete '" .. CONFIG_FILE .. "'") -- I made it use the CONFIG_FILE so if ya change that, this changes too!
 
-  
-    print("Items, use the format 'minecraft:clay,minecraft:stone' for multiple.")
-    io.write()
-    local itemInput = read()
-    local items = split(itemInput, ",")
+    -- 1. Ask for Mode Stuff uwu
+    print("\nSelect Mode:")
+    print("1. Items)
+    print("2. Fluids")
+    io.write("> ")
+    local modeInput = read()
+    local mode = "item"
+    if modeInput == "2" or string.lower(modeInput) == "fluid" or string.lower(modeInput) == "fluids" then
+        mode = "fluid"
+    end
+    print("Mode selected: " .. string.upper(mode))
 
-    print("Destinations (Name/ID, comma-separated, priority order):")
-    io.write()
+    if mode == "fluid" then
+        print("\nFluids to move (e.g. 'minecraft:water,minecraft:lava'):")
+    else
+        print("\nItems to move (e.g. 'minecraft:cobblestone,minecraft:stone'):")
+    end
+    io.write("> ")
+    local targetInput = read()
+    local targets = split(targetInput, ",")
+
+    -- 3. Destinations
+    print("\nDestinations (Name/ID, comma-separated):")
+    io.write("> ")
     local destInput = read()
     local destinations = split(destInput, ",")
     
-    print("Sources (Name/ID, comma-separated,sources get pulled from.): ")
-    io.write()
+    -- 4. Sources
+    print("\nSources (Name/ID, comma-separated):")
+    io.write("> ")
     local sourceInput = read()
     local sources = split(sourceInput, ",")
 
-    if #items == 0 or #destinations == 0 or #sources == 0 then
-        print("Error: Items, Destinations, and Sources must all be provided. Aborting setup.")
-        print("Try again ):.")
+    if #targets == 0 or #destinations == 0 or #sources == 0 then
+        print("Error: All fields must be provided. Aborting setup.")
         return nil
     end
 
-    saveConfig(items, destinations, sources)
-    return { items = items, destinations = destinations, sources = sources }
+    saveConfig(mode, targets, destinations, sources)
+    return { mode = mode, targets = targets, destinations = destinations, sources = sources }
 end
-
--- main
+--main
 
 local function main()
     local config = loadConfig()
@@ -241,10 +288,12 @@ local function main()
         config = promptForConfig()
     end
 
-    if config and config.items and #config.items > 0 and config.destinations and #config.destinations > 0 and config.sources and #config.sources > 0 then
-        sendAllItemsFromNetwork(config.items, config.destinations, config.sources)
+    if config and config.targets then
+        -- Default to item mode if old config exists without mode, this is so people can update their systems without havin to reconfigure
+        local mode = config.mode or "item" 
+        sendAllThingsFromNetwork(config.targets, config.destinations, config.sources, mode)
     else
-        print("Error: Invalid config. Please delete '" .. CONFIG_FILE .. "' and restart this.")
+        print("Error: Invalid config. Please delete '" .. CONFIG_FILE .. "' and restart.")
     end
 end
 
